@@ -40,10 +40,13 @@ describe('Curriculum Endpoints', () => {
 
     afterAll(async () => {
         // Cleanup hierarchy: LessonPlan -> Week -> Module -> Course -> Level -> Subject
-        // Using cascade delete or manual delete
-        // For simplicity in test, we might rely on test env reset, but here we try basic cleanup
-        await prisma.contentProvider.deleteMany({ where: { id: providerId } });
-        await prisma.user.deleteMany({ where: { email: adminEmail } });
+        try {
+            await prisma.subject.deleteMany({ where: { providerId: providerId } });
+            await prisma.contentProvider.deleteMany({ where: { id: providerId } });
+            await prisma.user.deleteMany({ where: { email: adminEmail } });
+        } catch (error) {
+            console.error('Curriculum cleanup failed:', error);
+        }
         await prisma.$disconnect();
     });
 
