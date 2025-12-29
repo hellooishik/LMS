@@ -6,3 +6,5 @@ module.exports = {
     moduleFileExtensions: ['ts', 'js', 'json', 'node'],
     setupFiles: ['<rootDir>/src/tests/setup.ts'],
 };
+
+// add v1.0
