@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------------------
+// 1. User Management & Auth (RBAC)
+// --------------------------------------
+
+enum Role {
+  ADMIN
+  TUTOR
+  PARENT
+  STUDENT
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          Role
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Profile relations
+  studentProfile StudentProfile?
+  tutorProfile   TutorProfile?
+  parentProfile  ParentProfile?
+
+  // Relations
+  sentMessages      Message[] @relation("SentMessages")
+  receivedMessages  Message[] @relation("ReceivedMessages")
+}
+
+model StudentProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime
+  gradeLevel  String   // e.g., "Grade 1"
+  
+  parentId    String
+  parent      ParentProfile @relation(fields: [parentId], references: [id])
+
+  // Batch & Progress
+  batchStudents   BatchStudent[]
+  attendances     Attendance[]
+  feedbacks       Feedback[]
+  assessments     Assessment[]
+}
+
+model TutorProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  firstName   String
+  lastName    String
+  bio         String?
+  subjects    String[] // Array of subject names capable of teaching
+  rating      Float    @default(0.0)
+
+  batches     Batch[]
+}
+
+model ParentProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  firstName   String
+  lastName    String
+  phone       String?
+
+  students    StudentProfile[]
+}
+
+// --------------------------------------
+// 2. Partnership & Content Providers
+// --------------------------------------
+
+enum ProviderType {
+  INTERNAL
+  EXTERNAL
+}
+
+model ContentProvider {
+  id          String       @id @default(uuid())
+  name        String
+  type        ProviderType @default(INTERNAL)
+  contactEmail String?
+  
+  courses     Course[]
+  subjects    Subject[]
+}
+
+// --------------------------------------
+// 3. Curriculum Engine (Strict Hierarchy)
+// --------------------------------------
+
+model Subject {
+  id          String   @id @default(uuid())
+  name        String   // e.g., "English", "Vedic Maths"
+  providerId  String
+  provider    ContentProvider @relation(fields: [providerId], references: [id])
+  
+  levels      Level[]
+}
+
+model Level {
+  id          String   @id @default(uuid())
+  name        String   // e.g., "Level A"
+  ageGroup    String   // e.g., "5-6"
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  
+  courses     Course[]
+}
+
+model Course {
+  id          String   @id @default(uuid())
+  levelId     String
+  level       Level    @relation(fields: [levelId], references: [id])
+  providerId  String
+  provider    ContentProvider @relation(fields: [providerId], references: [id])
+  
+  // A Course is a container for Modules
+  modules     Module[]
+  
+  // Batches run this specific Course
+  batches     Batch[]
+}
+
+model Module {
+  id          String   @id @default(uuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id])
+  name        String   // e.g., "Cycle 1"
+  sequence    Int      // 1, 2, 3...
+  
+  weeks       Week[]
+}
+
+model Week {
+  id          String   @id @default(uuid())
+  moduleId    String
+  module      Module   @relation(fields: [moduleId], references: [id])
+  number      Int      // 1 to 8
+  topic       String?
+
+  lessonPlan  LessonPlan?
+}
+
+model LessonPlan {
+  id              String   @id @default(uuid())
+  weekId          String   @unique
+  week            Week     @relation(fields: [weekId], references: [id])
+  
+  objective       String
+  materials       String[] // URLs to PDFs/Files
+  tutorInstructions String @db.Text
+  homeworkTask    String   @db.Text
+  durationBreakdown Json   // { "Reading": "10m", ... }
+
+  // Sessions that use this lesson plan
+  sessions        Session[]
+}
+
+// --------------------------------------
+// 4. Batch & Live Class Management
+// --------------------------------------
+
+model Batch {
+  id              String   @id @default(uuid())
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id])
+  tutorId         String
+  tutor           TutorProfile @relation(fields: [tutorId], references: [id])
+  
+  name            String   // e.g., "English-LvlA-Batch1"
+  scheduleConfig  Json     // { "days": ["Mon", "Wed"], "time": "16:00" }
+  startDate       DateTime
+  endDate         DateTime?
+
+  students        BatchStudent[]
+  sessions        Session[]
+}
+
+model BatchStudent {
+  id              String         @id @default(uuid())
+  batchId         String
+  batch           Batch          @relation(fields: [batchId], references: [id])
+  studentId       String
+  student         StudentProfile @relation(fields: [studentId], references: [id])
+  enrolledAt      DateTime       @default(now())
+
+  @@unique([batchId, studentId])
+}
+
+enum SessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model Session {
+  id              String        @id @default(uuid())
+  batchId         String
+  batch           Batch         @relation(fields: [batchId], references: [id])
+  lessonPlanId    String?
+  lessonPlan      LessonPlan?   @relation(fields: [lessonPlanId], references: [id])
+  
+  date            DateTime
+  link            String?       // Zoom link
+  status          SessionStatus @default(SCHEDULED)
+
+  attendances     Attendance[]
+  feedbacks       Feedback[]
+}
+
+// --------------------------------------
+// 5. Progress, Feedback & Messaging
+// --------------------------------------
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+model Attendance {
+  id              String           @id @default(uuid())
+  sessionId       String
+  session         Session          @relation(fields: [sessionId], references: [id])
+  studentId       String
+  student         StudentProfile   @relation(fields: [studentId], references: [id])
+  status          AttendanceStatus
+  
+  @@unique([sessionId, studentId])
+}
+
+model Feedback {
+  id              String         @id @default(uuid())
+  sessionId       String
+  session         Session        @relation(fields: [sessionId], references: [id])
+  studentId       String
+  student         StudentProfile @relation(fields: [studentId], references: [id])
+  
+  strengths       String?        @db.Text
+  improvements    String?        @db.Text
+  homeworkAssigned Boolean       @default(true)
+  
+  createdAt       DateTime       @default(now())
+}
+
+enum AssessmentType {
+  BASELINE
+  MONTHLY
+  END_OF_LEVEL
+}
+
+model Assessment {
+  id              String         @id @default(uuid())
+  studentId       String
+  student         StudentProfile @relation(fields: [studentId], references: [id])
+  type            AssessmentType
+  score           Float
+  feedback        String?        @db.Text
+  date            DateTime       @default(now())
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  content     String
+  senderId    String
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId  String
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
