@@ -25,9 +25,20 @@ export const registerUser = async (email: string, password: string, role: Role, 
 
         // Create Profile based on Role
         if (role === Role.STUDENT) {
-            if (!profileData.dateOfBirth || !profileData.parentId) {
-                throw new Error("Date of Birth and Parent ID are required for students");
+            if (!profileData.dateOfBirth) {
+                throw new Error("Date of Birth is required for students");
             }
+            // Check if parentId is provided (optional now at registration, or mandatory?)
+            // User requirement: "Parent - Student ownership model".
+            // Assuming simplified registration: if parentId is passed, link it.
+            const parentRelation = profileData.parentId ? {
+                parents: {
+                    create: {
+                        parentId: profileData.parentId
+                    }
+                }
+            } : {};
+
             await tx.studentProfile.create({
                 data: {
                     userId: newUser.id,
@@ -35,7 +46,7 @@ export const registerUser = async (email: string, password: string, role: Role, 
                     lastName: profileData.lastName,
                     dateOfBirth: new Date(profileData.dateOfBirth),
                     gradeLevel: profileData.gradeLevel || 'Ungraded',
-                    parentId: profileData.parentId,
+                    ...parentRelation
                 },
             });
         } else if (role === Role.TUTOR) {

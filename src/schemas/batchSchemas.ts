@@ -5,11 +5,14 @@ export const createBatchSchema = z.object({
         courseId: z.string().uuid(),
         tutorId: z.string().uuid(),
         name: z.string(),
-        scheduleConfig: z.object({
-            days: z.array(z.string()), // e.g., ["Mon", "Wed"]
-            time: z.string(), // e.g., "16:00"
-        }),
+        scheduleConfig: z.any(), // Refine later
         startDate: z.string().datetime(), // ISO Date string
         endDate: z.string().datetime().optional(),
     }),
 });
+
+export const enrollStudentSchema = z.object({
+    batchId: z.string().uuid({ message: "Invalid batch ID" }),
+    studentId: z.string().uuid({ message: "Invalid student ID" }),
+});
+

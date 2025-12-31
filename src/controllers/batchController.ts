@@ -26,5 +26,22 @@ export const getTutorSchedule = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: error.message });
         }
         res.status(500).json({ error: error.message });
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const enrollStudent = async (req: AuthRequest, res: Response) => {
+    try {
+        const { batchId, studentId } = req.body;
+        // Basic validation
+        if (!batchId || !studentId) {
+            return res.status(400).json({ error: 'batchId and studentId are required' });
+        }
+
+        // Call service
+        const enrollment = await batchService.enrollStudent(batchId, studentId);
+        res.status(201).json(enrollment);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
     }
 };

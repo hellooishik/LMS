@@ -34,6 +34,7 @@ model User {
   // Relations
   sentMessages      Message[] @relation("SentMessages")
   receivedMessages  Message[] @relation("ReceivedMessages")
+  auditLogs         AuditLog[]
 }
 
 model StudentProfile {
@@ -45,14 +46,15 @@ model StudentProfile {
   dateOfBirth DateTime
   gradeLevel  String   // e.g., "Grade 1"
   
-  parentId    String
-  parent      ParentProfile @relation(fields: [parentId], references: [id])
+  // Revised: Many-to-Many Parent Relationship
+  parents     ParentStudent[]
 
   // Batch & Progress
-  batchStudents   BatchStudent[]
+  enrollments     Enrollment[]
   attendances     Attendance[]
   feedbacks       Feedback[]
   assessments     Assessment[]
+  homeworkSubmissions HomeworkSubmission[]
 }
 
 model TutorProfile {
@@ -76,7 +78,17 @@ model ParentProfile {
   lastName    String
   phone       String?
 
-  students    StudentProfile[]
+  students    ParentStudent[]
+}
+
+// JOIN TABLE: Parent <-> Student
+model ParentStudent {
+  parentId  String
+  parent    ParentProfile @relation(fields: [parentId], references: [id])
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id])
+
+  @@id([parentId, studentId])
 }
 
 // --------------------------------------
@@ -133,6 +145,7 @@ model Course {
   
   // Batches run this specific Course
   batches     Batch[]
+  enrollments Enrollment[]
 }
 
 model Module {
@@ -163,11 +176,17 @@ model LessonPlan {
   objective       String
   materials       String[] // URLs to PDFs/Files
   tutorInstructions String @db.Text
-  homeworkTask    String   @db.Text
+  homeworkTask    String?  @db.Text // Deprecated in favor of Homework model? Keeping for backward compat if needed, or removing?
+                         // User said "Homework assigned... lived in lessonPlan.. needs separate model". 
+                         // leaving as is but adding relations helps. 
   durationBreakdown Json   // { "Reading": "10m", ... }
 
   // Sessions that use this lesson plan
   sessions        Session[]
+  
+  // New Relations
+  homworks        Homework[]
+  assessments     Assessment[]
 }
 
 // --------------------------------------
@@ -186,19 +205,24 @@ model Batch {
   startDate       DateTime
   endDate         DateTime?
 
-  students        BatchStudent[]
+  enrollments     Enrollment[]
   sessions        Session[]
 }
 
-model BatchStudent {
-  id              String         @id @default(uuid())
-  batchId         String
-  batch           Batch          @relation(fields: [batchId], references: [id])
-  studentId       String
-  student         StudentProfile @relation(fields: [studentId], references: [id])
-  enrolledAt      DateTime       @default(now())
-
-  @@unique([batchId, studentId])
+// Replaces BatchStudent
+model Enrollment {
+  id          String         @id @default(uuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id])
+  courseId    String
+  course      Course         @relation(fields: [courseId], references: [id])
+  batchId     String
+  batch       Batch          @relation(fields: [batchId], references: [id])
+  
+  startDate   DateTime       @default(now())
+  status      String         // ACTIVE, COMPLETED, DROPPED
+  
+  @@unique([studentId, batchId])
 }
 
 enum SessionStatus {
@@ -260,17 +284,53 @@ model Feedback {
 enum AssessmentType {
   BASELINE
   MONTHLY
-  END_OF_LEVEL
+  FINAL
+  END_OF_LEVEL // kept for compatibility if needed, else remove
 }
 
 model Assessment {
-  id              String         @id @default(uuid())
-  studentId       String
-  student         StudentProfile @relation(fields: [studentId], references: [id])
-  type            AssessmentType
-  score           Float
-  feedback        String?        @db.Text
-  date            DateTime       @default(now())
+  id            String         @id @default(uuid())
+  studentId     String
+  student       StudentProfile @relation(fields: [studentId], references: [id])
+  
+  // Extended Fields
+  lessonPlanId  String?
+  lessonPlan    LessonPlan?    @relation(fields: [lessonPlanId], references: [id])
+  
+  type          AssessmentType
+  skillTag      String         // e.g. Reading, Writing
+  level         String         // e.g. Below, At, Above
+  
+  score         Float?
+  remarks       String?        @db.Text
+  date          DateTime       @default(now())
+}
+
+// New Homework Models
+model Homework {
+  id           String   @id @default(uuid())
+  lessonPlanId String
+  lessonPlan   LessonPlan @relation(fields: [lessonPlanId], references: [id])
+  
+  instructions String   @db.Text
+  dueDate      DateTime?
+  
+  submissions  HomeworkSubmission[]
+}
+
+model HomeworkSubmission {
+  id             String   @id @default(uuid())
+  homeworkId     String
+  homework       Homework @relation(fields: [homeworkId], references: [id])
+  studentId      String
+  student        StudentProfile @relation(fields: [studentId], references: [id])
+  
+  submissionLink String?
+  text           String?  @db.Text
+  status         String   // PENDING, SUBMITTED, REVIEWED
+  submittedAt    DateTime @default(now())
+  
+  @@unique([homeworkId, studentId])
 }
 
 model Message {
@@ -282,4 +342,15 @@ model Message {
   receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   read        Boolean  @default(false)
   createdAt   DateTime @default(now())
+}
+
+// Audit & Compliance
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  details   String?  @db.Text
+  timestamp DateTime @default(now())
 }

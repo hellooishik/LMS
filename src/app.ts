@@ -6,6 +6,9 @@ import authRoutes from './routes/authRoutes';
 import curriculumRoutes from './routes/curriculumRoutes';
 import batchRoutes from './routes/batchRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
+import parentRoutes from './routes/parentRoutes';
+import tutorRoutes from './routes/tutorRoutes';
+import adminRoutes from './routes/adminRoutes';
 
 const app = express();
 
@@ -22,6 +25,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/curriculum', curriculumRoutes);
 app.use('/api/batches', batchRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/parent', parentRoutes);
+app.use('/api/tutor', tutorRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Global Error Handler Stub
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
